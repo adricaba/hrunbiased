@@ -1,0 +1,19 @@
+Package: hrunbiased
+Type: Package
+Version: 0.99.0
+Date: 2018-08-01
+Title: Survival analysis for gene signatures
+Author: Adria Caballe <adria.caballe@irbbarcelona.org>
+Maintainer: Adria Caballe <adria.caballe@irbbarcelona.org>
+Description: This package implements several functions useful for
+             fitting proportional hazard models when the variable of
+             interest is a gene signature.
+LazyLoad: no
+LazyData: true
+VignetteBuilder: knitr
+biocViews: Microarray, Preprocessing, Normalization, GeneExpression, Survival
+Depends: R (>= 3.5), RColorBrewer,  Biobase, vioplot,  ExperimentHub
+Imports: coxme, survival, ruv, simsurv, parallel, grDevices, graphics,
+         utils, stats, GSVA, dSVA, AnnotationHub, methods
+Suggests: BiocStyle, knitr, rmarkdown
+License: GPL-3

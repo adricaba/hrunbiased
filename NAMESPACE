@@ -1,0 +1,70 @@
+export(randomSigCoxmeSimple)
+export(hrunbiasedDiagnostic)
+export(hrunbiasedTesting)
+export(print.hrunbiasedTesting)
+export(plot.hrunbiasedTesting)
+export(coxme.three.options)
+export(correction.by.ruv)
+export(geneMeanHRvsSignatureHR)
+export(plotGeneMeanHRvsSignatureHR)
+export(plotpowAndBias)
+export(corNCSvsRS)
+export(posControlsPower)
+export(plotposControlsPower)
+export(rsCoxmeBySigSizes)
+export(permutationsOut)
+export(plotPermutationsOut)
+export(GSnegControls)
+export(sm.coxme)
+export(hrunbiasedDensityRS)
+export(hrunbiasedPermutations)
+export(hrunbiasedPCpower)
+export(hrunbiasedSimulations)
+export(hrunbiasedPCAcorrelation)
+export(plotcorrectionsSimulations)
+export(plotrsCoxmeByCorrections)
+export(surv.form)
+export(basic.controls)
+export(diagnostic.controls)
+export(signmethod.control2)
+export(signmethod.control)
+export(adjvarGS.control)
+export(mod.controls)
+export(perm.controls)
+export(pow.controls)
+export(pcaCorrFun)
+export(hrunbiasedPCAcorrelationplot)
+
+
+S3method(plot, hrunbiasedDiagnostic)
+S3method(plot, hrunbiasedTesting)
+S3method(print, hrunbiasedDiagnostic)
+S3method(print, hrunbiasedTesting)
+
+import(RColorBrewer)
+import(Biobase)
+import(ExperimentHub)
+importFrom(AnnotationHub, query)
+
+importFrom("survival", "coxph","Surv")
+importFrom("simsurv","simsurv")
+importFrom("ruv", "RUV2","RUV4")
+importFrom("coxme", "coxme")
+importFrom("vioplot", "vioplot")
+importFrom("parallel", "mclapply")
+importFrom("grDevices", "devAskNewPage", "densCols", "gray.colors",
+           "grey.colors","rgb")
+importFrom("graphics", "curve", "abline", "lines", "par", "plot", "points",
+           "layout", "legend", "boxplot", "text", "axis", "mtext", "box",
+           "arrows")
+importFrom("utils", "setTxtProgressBar", "txtProgressBar")
+importFrom("stats", "as.dist", "cor", "cov", "cov2cor", "dbinom",
+             "dnorm", "lm", "median", "pgamma", "pnorm", "punif", "prcomp",
+             "qgamma", "qnorm", "quantile", "rbeta", "rbinom", "rgamma",
+             "pchisq", "mad", "rmultinom", "rnorm", "runif", "sd", "var",
+             "formula", "model.matrix", "density", "rweibull" )
+importFrom("dSVA", "dSVA")
+importFrom("GSVA", "gsva")
+importFrom("methods", "is")
+
+

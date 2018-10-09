@@ -1,0 +1,7 @@
+hrunbiased NEWS:
+	Version 1.0.1:
+		* R package for survival analysis of gene signatures
+		* Diagnostic plots for Cox models when the variable of interest is a gene signature are
+		  developed using random gene signatures.
+		* Provide corrections by negative control signatures / factors and global signature
+		* GSVA and PLAGE could also be used as geneset summarization 
