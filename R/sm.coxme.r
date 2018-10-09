@@ -1,0 +1,12 @@
+sm.coxme <- function (x, rcoef = FALSE, digits = options()$digits, ...)
+{
+  beta <- x$coefficients
+  nvar <- length(beta)
+  nfrail <- nrow(x$var) - nvar
+  se <- sqrt(diag(as.matrix(x$var))[nfrail + seq_len(nvar)])
+  tmp <- cbind(beta, exp(beta), se, beta/se,
+               1 - pchisq((beta/se)^2, 1))
+  dimnames(tmp) <- list(names(beta), c("coef", "exp(coef)",
+                                         "se(coef)", "z", "p"))
+  tmp
+}

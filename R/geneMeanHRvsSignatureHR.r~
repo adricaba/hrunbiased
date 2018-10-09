@@ -1,0 +1,92 @@
+geneMeanHRvsSignatureHR <- function(nda, correction.type, score, seqquant,
+    randsign, adj.var.GS = "GSadj", comp.RUV = c(1,2), mc.cores = 1,
+    adjusted.var.random = NA, adjusted.var.fixed= NA, covar.RUV = NULL,
+    rs.HR = NULL, GSs = NULL, executation.info = TRUE,
+    signature.method = "zscore"){
+
+  if(correction.type %in%  c("Gsignature", "none")) ln <- 1
+  else  ln <- length(seqquant)
+  if(is.null(GSs))
+    GSs <- GSnegControls(nda=nda, correction.type = correction.type,
+             score=score, seqquant=seqquant, comp.RUV = comp.RUV,
+             covar.RUV = covar.RUV)
+  GS <- GSs[[1]]
+  if(is.null(rs.HR))
+   rcs <- do.call(rbind,randomSigCoxmeSimple(nda,
+          randsign = randsign,  sigSize = NULL, mc.cores =  mc.cores,
+          signature.method = signature.method, needScaling = FALSE, nite=500,
+          GS = GS, adjusted.var.random =  adjusted.var.random,
+          adj.var.GS = adj.var.GS, adjusted.var.fixed = adjusted.var.fixed))
+  else{
+         if (is.list(rs.HR))  rcs <- rs.HR[[1]]
+         else  rcs <- rs.HR
+     }
+
+  genes.all <- as.list(unique(unlist(randsign)))
+  rcs.gs <- do.call(rbind,randomSigCoxmeSimple(nda, randsign = genes.all,
+             sigSize = NULL, mc.cores =  mc.cores, needScaling = FALSE,
+             signature.method = signature.method,  nite=500, GS = GS,
+             adjusted.var.random =  adjusted.var.random,
+             adj.var.GS = adj.var.GS, adjusted.var.fixed= adjusted.var.fixed,
+             executation.info = executation.info))
+   HRbySignR <- rcs[,1]
+   HRbyGeneRi <- rcs.gs[,1]
+   HRbyGeneR <- sapply(randsign, function(x) mean(HRbyGeneRi[genes.all%in%x]))
+
+   return(list(HRbySignR =  rcs[,1], HRbyGeneRi = rcs.gs[,1],
+               HRbyGeneR = HRbyGeneR))
+}
+
+plotGeneMeanHRvsSignatureHR <- function(geneMeanHR.signatureHR){
+
+ m <- matrix(c(1,1, 1, 2,3,4), nrow = 2,ncol = 3,byrow = TRUE)
+ layout(mat = m, heights = c(0.15,0.85))
+ par(mar=c(.1, .1, .1, .1), xpd=TRUE)
+ plot(1, type = "n", axes=FALSE, xlab="", ylab="")
+ legend("center", legend=c("rand gene", "rand gene mean", "rand sign"),
+       fill=2:4, horiz=TRUE)
+
+ # lHR rand sign vs lHR mean rand gene of signature
+ par(mar=c(6.1, 4.1, 0.1, 3.5), xpd=FALSE)
+ plot(geneMeanHR.signatureHR$HRbyGeneR, geneMeanHR.signatureHR$HRbySignR,
+      ylab = "lHR rand sign", xlab="lHR rand gene mean",
+      xlim = c(min(geneMeanHR.signatureHR$HRbySignR),
+               max(geneMeanHR.signatureHR$HRbySignR)),
+      ylim = c(min(geneMeanHR.signatureHR$HRbySignR),
+               max(geneMeanHR.signatureHR$HRbySignR)), pch=20,
+      col = densCols(geneMeanHR.signatureHR$HRbyGeneR,
+                   geneMeanHR.signatureHR$HRbySignR))
+ coord <- par("usr")
+ lines(c(0,0), coord[3:4], col="gray")
+ lines(coord[seq_len(2)], c(0,0), col="gray")
+
+ lmt <- lm(geneMeanHR.signatureHR$HRbySignR  ~
+            geneMeanHR.signatureHR$HRbyGeneR)
+ lines(geneMeanHR.signatureHR$HRbyGeneR[c(which.min(lmt$fit),
+        which.max(lmt$fit))], c(min(lmt$fit),max(lmt$fit)), col=3)
+
+ # Density lHR  by random genes, random signatures and mean of rand gene
+ par(mar=c(6.1, 4.1, 0.1, 3.5), xpd=FALSE)
+ dr <- density((geneMeanHR.signatureHR$HRbyGeneR))
+ dr2 <- density((geneMeanHR.signatureHR$HRbyGeneRi))
+ dr3 <- density((geneMeanHR.signatureHR$HRbySignR))
+ plot(dr, ylim = c(min(dr$y),max(dr$y)), xlim = c(min(c(dr$x,dr3$x, dr2$x)),
+     max(c(dr$x,dr3$x, dr2$x))), main = "", col=3, lwd=2, xlab="lHR")
+ lines(c(0,0), c(0,max(dr$y)), col="gray", lty=2)
+ lines(dr2, col=2, lwd=2)
+ lines(dr3, col=4, lwd=2)
+ points(dr$x[which.max(dr$y)],0,pch="|", col=3)
+ points(dr2$x[which.max(dr2$y)],0,pch="|", col=2)
+ points(dr3$x[which.max(dr3$y)],0,pch="|", col=4)
+
+ # Boxplot lHR  by random genes, random signatures and mean of rand gene
+ par(mar=c(6.1, 4.1, 0.1, 3.5), xpd=FALSE)
+ boxplot(list(rgene = geneMeanHR.signatureHR$HRbyGeneRi,
+  rmean = geneMeanHR.signatureHR$HRbyGeneR,
+  rsign = geneMeanHR.signatureHR$HRbySignR), pch=20,
+         col = c(2,3,4), ylab="lHR")
+ lines(c(0.5,3.5), c(0,0), col="gray")
+ par(mfrow=c(1,1))
+}
+
+

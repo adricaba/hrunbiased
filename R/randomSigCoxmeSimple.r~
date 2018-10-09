@@ -1,0 +1,122 @@
+## Function randomSigCoxmeSimple
+randomSigCoxmeSimple <- function(nda, randsign,  sigSize = NULL, mc.cores = 1,
+    signature.method = "zscore", needScaling = FALSE, nite = 500, GS = NULL,
+    adjusted.var.random = NA, adjusted.var.fixed = NA, adj.var.GS = "GSadj",
+    executation.info = TRUE, perm = FALSE){
+
+        nite <- ifelse(is.null(randsign), nite, length(randsign))
+        if(needScaling) enda2 <- t(scale(t(exprs(nda))))
+        else enda2 <- exprs(nda)
+        ds <-  pData(nda)
+        ds$evn <- as.numeric(ds$evn) #- 1
+        if(perm) enda2 <- enda2[,sample(1:dim(enda2)[2])]
+        ds$GS <- GS
+
+        if(signature.method=="gsva"|signature.method=="plage")
+            {
+              if(length(randsign[[1]])>1){
+                  gsva.aux <- gsva(nda, randsign, method=signature.method,
+                                   parallel.sz = mc.cores )
+                  if(class(gsva.aux)=="list")
+                      gsva.aux <- exprs(gsva.aux$es.obs)
+                  if(class(gsva.aux)=="ExpressionSet")
+                      gsva.aux <- exprs(gsva.aux)
+                    if(signature.method=="plage"){
+                        cors <- as.numeric(sign(cor(t(gsva.aux),
+                                                    apply(enda2,2,mean))))
+                        gsva.aux <- (gsva.aux) * cors
+                    }
+                }
+                else{
+                    gsva.aux <- enda2[as.character(randsign),]
+                }
+            }
+
+        ## random signatures cox models
+        if(executation.info)
+          pb <- txtProgressBar(min = 0, max = nite, style = 3)
+        randHR <- mclapply(1:nite, function(j){
+         if(executation.info ) setTxtProgressBar(pb, j)
+         if(is.null(randsign))
+            sdd <- sample(rownames(nda), sigSize)
+         else
+             sdd <- randsign[[j]]
+
+         if(length(sdd)==1)
+             Gsmr <- enda2[rownames(nda)%in%sdd,]
+         else
+         {
+              if(signature.method=="pca"){
+                 Gsmr1 <- prcomp(t(enda2[rownames(nda)%in%sdd,]))$x[,1]
+                 Gsmr <- sign(cor(Gsmr,Gsmr1)) * Gsmr1
+             }
+              if(signature.method=="gsva"|signature.method=="plage"){
+                  Gsmr <- scale(gsva.aux[j,])
+                  ds$GS <- GS <- NULL
+              }
+             else{
+                     Gsmr <- apply(t(enda2[rownames(nda)%in%sdd,]),1,
+                                   mean, na.rm = TRUE)
+            }
+         }
+         if(!is.null(GS)){
+             if(adj.var.GS == "GScor"){
+                         ds$gs <- scale(Gsmr - GS)#/SD
+                         ds$GS <- GS <- NULL
+                     }
+             if(adj.var.GS == "GSadj")
+                 ds$gs <- scale(Gsmr)
+             if(adj.var.GS == "GSlmcor"){
+                 ds$gs <- scale(lm(Gsmr ~ GS)$resid)
+                 ds$GS <- GS <- NULL
+            }
+         }
+         else
+             ds$gs <- scale(Gsmr)
+
+         form1 <- surv.form(ds = ds, adjusted.var.fixed = adjusted.var.fixed,
+                   adjusted.var.random = adjusted.var.random)
+
+         m <- eval(parse(text=form1))
+         if(is.na(adjusted.var.random[1]))
+             return(summary(m)["coefficients"][[1]]["gs",])
+         else
+             return(c(sm.coxme(m)["gs",]))
+       },mc.cores=mc.cores)
+
+       return(randHR)
+}
+
+
+
+
+surv.form <- function(ds, adjusted.var.fixed, adjusted.var.random)
+{
+
+    if(!is.na(adjusted.var.random[1]))
+        mixeff <- paste0("(1|", adjusted.var.random, ")", collapse = " + ")
+
+    if(!is.na(adjusted.var.fixed[1])){
+      if(is.null(ds$GS)) fixeff <- paste0(adjusted.var.fixed, collapse = " + ")
+      else fixeff <- paste0(paste0(adjusted.var.fixed, collapse = " + ")," + GS")
+    }
+    else{
+        if(!is.null(ds$GS)){
+            adjusted.var.fixed <- "GS"
+            fixeff <- paste0(adjusted.var.fixed, collapse = " + ")
+        }
+    }
+
+    if(is.na(adjusted.var.fixed[1])){
+        if(is.na(adjusted.var.random[1]))
+                form1 <- paste0("coxph(Surv(tev, evn) ~  gs, data = ds)")
+        else
+                form1 <- paste0("coxme(Surv(tev, evn) ~  gs + ", mixeff, ", data = ds)")
+     }else{
+        if(is.na(adjusted.var.random[1]))
+                form1 <- paste0("coxph(Surv(tev, evn) ~  gs + ", fixeff, ", data = ds)")
+        else
+                form1 <- paste0("coxme(Surv(tev, evn) ~  gs + ", fixeff, " + ", mixeff, ", data = ds)")
+    }
+    return(form1)
+}

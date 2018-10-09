@@ -1,0 +1,117 @@
+## Function basic.controls
+basic.controls <- function(nda, correction.type, sigSize){
+
+  correction.types.av <- c("NCsignatures","Gsignature", "RUV", "SVA", "none")
+  correction.type <- correction.types.av[pmatch(correction.type,
+     correction.types.av)]
+  if(is.na(correction.type)){
+   warning(
+    "correction.type is not correctly specified, NCsignatures will be used")
+   correction.type <- "NCsignatures"
+  }
+
+  if(!(any(which(nda$evn==1)) & any(which(nda$evn==0))))
+     stop("pData(nda) must contain numeric vector evn
+          with both zeros and ones")
+  if(any(sigSize > dim(nda)[1] | sigSize < 1))
+    stop("sigSize must be between 1 and dim(nda)[1]")
+  return(correction.type = correction.type)
+}
+
+diagnostic.controls <- function(diagnostic.type){
+
+  diagnostic.types.av <- c("density.rs", "permutations", "simulations",
+                          "positive.cont.power", "PCAcorrelation")
+  diagnostic.type <- diagnostic.types.av[pmatch(diagnostic.type,
+     diagnostic.types.av)]
+  if(any(is.na(diagnostic.type))){
+   warning(
+    "diagnostic.type is not correctly specified, density.rs will be used")
+   diagnostic.type <- "density.rs"
+  }
+  return(diagnostic.type)
+}
+signmethod.control2 <- function(signature.method){
+
+  signature.method.av <- c("zscore", "gsva")
+  signature.method <- signature.method.av[pmatch(signature.method,
+    signature.method.av)]
+  if(any(is.na(signature.method))){
+   warning(
+    "signature.method is not correctly specified, zscore will be used")
+   signature.method <- "zscore"
+  }
+  return(signature.method)
+}
+signmethod.control <- function(signature.method){
+
+  signature.method.av <- c("zscore", "gsva", "plage")
+  signature.method <- signature.method.av[pmatch(signature.method,
+    signature.method.av)]
+  if(any(is.na(signature.method))){
+   warning(
+    "signature.method is not correctly specified, zscore will be used")
+   signature.method <- "zscore"
+  }
+  return(signature.method)
+}
+
+adjvarGS.control <- function(adj.var.GS){
+
+  adj.var.GS.av <- c("GSadj", "GScor", "GSlmcor")
+  adj.var.GS <-  adj.var.GS.av[pmatch(adj.var.GS, adj.var.GS.av)]
+  if(any(is.na(adj.var.GS))){
+   warning(
+    "adj.var.GS is not correctly specified, GSadj will be used")
+   adj.var.GS <- "GSadj"
+  }
+  return(adj.var.GS)
+}
+
+mod.controls <- function(nda, adjusted.var.random, adjusted.var.fixed, GSs){
+#  if(!is.na(adjusted.var.random))
+#   if(!adjusted.var.random%in%names(pData(nda)))
+#      stop("adjusted.var.random is not in pData(nda)")
+#   if(!is.na(adjusted.var.fixed))
+#    if(!adjusted.var.fixed%in%names(pData(nda)))
+#      stop("adjusted.var.fixed is not in pData(nda)")
+  if(!is.null(GSs)) if(!is.list(GSs))
+     stop("GS must be either NULL or a list with the adjusting variables")
+}
+
+perm.controls <- function(permutation.type){
+  permutation.types.av <- c("none","Gsignature", "norm01")
+  permutation.type <- permutation.types.av[pmatch(permutation.type,
+     permutation.types.av)]
+  if(is.na(permutation.type)){
+   warning("permutation.type is not correctly specified, none will be used")
+   permutation.type <- "none"
+  }
+  return(permutation.type)
+}
+
+
+pow.controls <- function(alternative, prop.pos.cont, null.dist, id.size,
+                 sigSize){
+ alternative.av <- c("two.sided", "greater", "less")
+  alternative <- alternative[pmatch(alternative, alternative.av)]
+  if(is.na(alternative)){
+   warning("alternative is not correctly specified, two.sided will be used")
+   alternative <- "two.sided"
+  }
+
+  if(any(prop.pos.cont > 1) | any(prop.pos.cont < 0))
+    stop("prop.pos.cont must be between 0 and 1")
+  if(id.size > length(sigSize))
+     stop("id.size must be between 1 and length(sigSize)")
+
+  null.dist.av <- c("asymptotic", "random.signatures")
+  null.dist <- null.dist[pmatch(null.dist, null.dist.av)]
+  if(is.na(null.dist)){
+   warning("null.dist is not correctly specified, asymptotic will be used")
+   null.dist <- "asymptotic"
+  }
+  return(list(alternative = alternative, null.dist = null.dist))
+}
+
+
