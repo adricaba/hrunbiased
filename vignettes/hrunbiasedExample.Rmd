@@ -1,0 +1,562 @@
+---
+title: "Controlling for systematic technical biases in breast cancer survival
+association with gene signatures using the hrunbiased package"
+output:
+  BiocStyle::html_document:
+    fig_height: 7
+    fig_width: 9
+    toc: yes
+    toc_depth: 2
+    number_sections: true
+---
+<!--
+%% \VignetteEngine{knitr::rmarkdown}
+%% \VignetteIndexEntry{analysis vignette}
+-->
+
+`r library("knitr")`
+`r opts_chunk$set(cache=FALSE, fig.width=9, message=FALSE,
+warning=FALSE, fig.align = "left")`
+
+Adria Caballe Mestres
+<adria.caballe@irbbarcelona.org>
+
+# Paper associated to R package
+```{r load-packages, message=FALSE, warning=FALSE}
+library( hrunbiased )
+```
+The R package `hrunbiased` contains several diagnoses
+which can be useful to decide whether an adjustment in estimating
+hazard ratios for gene signatures is needed and, in some extent, which
+class of correction could be  appropriate. The underlying methodology
+is described at
+
+Caballe Mestres A, Berenguer Llergo A and Stephan-Otto Attolini C.
+Adjusting for systematic technical biases in risk assessment of gene signatures
+in transcriptomic cancer cohorts. bioRxiv (2018).
+
+We encourage anybody wanting to use the R package to first read the
+associated paper.
+
+In Section 2 of this manual we present the breast cancer dataset `nda.brca` from the
+ExperimentHub package `mcsurvdata` that is used as example to
+illustrate some of the main utilities of the hrunbiased package. In
+Section 3 we perform the analysis for one of the cohorts
+(GSE1456). The same type of plots could be generated for any
+other breast cancer cohort available in `nda.brca` and the resulting output,
+which is stored in
+```{r, message = FALSE}
+data(out.brca, package="hrunbiased")
+```
+is presented in Section 4.
+
+# Data: nda.brca from mcsurvdata data package
+
+The `mcsurvdata::nda.brca` data contains a merged expression set object
+with the normalized gene expression profile of several breast cancer
+cohorts standardized using as reference the metabric data.
+Only ER+ samples are included.
+Time to relapse event is provided by all datasets except GSE3494,
+where time to death from breast cancer is used instead.
+Besides, `hrunbiased::mammaprint.sig` is a character string with the mammaprint
+gene signature as defined in Cardoso et al. (2016) which will be used to generate positive
+control signatures.
+
+
+```{r, message = FALSE}
+eh <- ExperimentHub()
+nda.brca <- query(eh, "mcsurvdata")[["EH1497"]]
+nda.gse1456 <- nda.brca[,nda.brca$dataset=="GSE1456"]
+data(mammaprint.sig, package="hrunbiased")
+mammaprint.sig <- intersect(mammaprint.sig, rownames(nda.gse1456))
+mammaprint.sig
+```
+
+
+# Diagnostic plots for GSE1456
+
+## Random signatures based distributions
+As first control, we compute the distribution of log Hazard ratio (lHR) test statistics using
+random gene signatures.  We fix a random generator seed to generate
+`nrs`  random signatures of several sizes
+
+```{r}
+diagnostic.type <- "density.rs"
+nrs <- 300
+seed <- 12313
+set.seed(seed)
+sigSize <- c(1, 50, 100, 200)
+```
+
+We consider a correction type by negative controls gene signatures, which are
+determined by least variable genes using as score the mean absolute deviation
+(mad). We take several cut-offs for the empirical cumulative distribution of
+the mad including zero (no correction) and one (global signature correction).
+
+```{r}
+correction.type <- "NCsignatures"
+seqquant  <- c(0,0.05, 0.2, 1)
+vargenes.score <-  apply(exprs(nda.gse1456),1,mad)
+```
+
+Another general attribute we fix is the number of cores used to speed
+up the process (only for unix system)
+
+```{r}
+mc.cores <- ifelse(.Platform$OS.type == "unix", 8, 1)
+```
+
+An object of class `hrunbiasedDensityRS` is obtained using function
+`hrunbiased::hrunbiasedDiagnostic`
+```{r, warning = FALSE, message = FALSE}
+out1 <- hrunbiasedDiagnostic(nda.gse1456, correction.type = correction.type,
+  score = vargenes.score,  seqquant = seqquant, mc.cores = mc.cores,
+  diagnostic.type = diagnostic.type, sigSize = sigSize, nrs = nrs,
+  id.size = 2, executation.info = FALSE)
+```
+
+Figure 1 shows a density plot for lHR statistic
+as function of signature size, which can be achieved by the plot method
+of an `hrunbiasedDensityRS` object setting attribute `diagnostic.plot
+= "density.rs.size"`. The Cox model with no adjustment for negative
+controls (q_0) presents a positive bias. This is not rare in breast
+cancer studies (Venet et al., 2011). The interpretation of the underlying HR for a
+target signature can be misleading though. For instance, a large number
+(more than expected by chance) of random signatures might be considered of
+risk without being to much special in comparison to the whole distribution of
+random signatures. Besides, as the signature size increases the variance of
+the statistics decreases due to higher signature-signature correlations.
+Adjusting by negative control signatures reduces the observed bias but the
+statistic distributions still depends on the signature size. The correction by
+global signature (q_1) solves this problem with all the empirical
+distributions looking much alike.
+
+```{r fig1, fig.align = "left", fig.cap = "GSE1456 diagnostic: density plot for random signature lHR-statisitcs using several signature sizes and under different negative control signature adjustments, from q_0 (no adjustment) to q_1 (global signature adjustment); Positive bias is present when no confounding factors are included in the model; This is removed when adjusting by the global signature.", warning = FALSE, message = FALSE, fig.width = 8, fig.height=7}
+plot(out1, diagnostic.plot = "density.rs.size", lwd=3)
+```
+
+We proposed to find the association between a gene signature and survival by
+averaging the expression across the genes of the signature. This enhances the
+power of detecting biological signal in comparison to finding a summary of
+gene-to-survival associations for all genes belonging in the target signature.
+In the `diagnostic.plot = "geneMean.geneSign"`, see Figure  2, the relationship between lHR
+for single genes, random signatures and average lHR for single genes in
+random signatures is presented, in this case for signatures of size 50, as
+determined by attribute `id.size` in using the `hrunbiasedDiagnostic`
+function.  Under no adjustment in the Cox models, a small positive bias
+observed when linking survival with single genes is magnified for random
+signatures of size 50.
+
+```{r fig2, warning = FALSE, message = FALSE, fig.width = 8, fig.height=5, fig.cap = "GSE1456 diagnostic: estimated lHR for random signatures (blue) against average estimated lHR at gene level across random signatures (green) and estimated lHR at gene level (red); Small biases at gene level are magnified when using gene signatures of size 50.", fig.wide = TRUE}
+plot(out1, diagnostic.plot = "geneMean.geneSign")
+```
+
+
+
+##  Shuffling of the outcome
+We found that biases can be due to the sampling process and the implicit
+gene-to-gene correlation structure. This is shown using the function
+`hrunbiased::hrunbiasedDiagnostic` with `diagnostic.type = "permutations"`
+where the association between survival and random signatures is obtained
+under an outcome shuffling. In this way, we break the association
+between survival and the covariates while keeping the gene dependence
+structure. For computational reasons we show the results in only 5
+permutations of the outcome in Figure 3. Biases are distinctively positive and negative
+in each instance tending towards the association with the global
+signature (GS). In order to remove the observed biases, we are encouraged
+to adjust for a global signature that contains this common tendency.
+
+
+```{r, warning = FALSE, message = FALSE}
+nperm <- 5
+diagnostic.type <- "permutations"
+out2 <- hrunbiasedDiagnostic(nda.gse1456, correction.type = "none",
+     mc.cores=mc.cores, diagnostic.type = diagnostic.type, sigSize = sigSize,
+    nrs = nrs,  nperm = nperm, executation.info = FALSE)
+```
+
+
+```{r fig3, warning = FALSE, message = FALSE, fig.align = "center", fig.width = 8, fig.height=9, fig.cap = "GSE1456 diagnostic:  lHR distributions for random signatures (top), boxplots of global signature distinguishing between samples with event and no event (middle) and relationship between mean lHR ratio across random singatures and the differences on average between GS in events (bottom); All three plots consider 5 instances of a shuffling of the outcome."}
+par(mfrow=c(3,1))
+plot(out2, diagnostic.plot = "perm.violin", ylab="lHR-stat",xlab="Instances")
+plot(out2, diagnostic.plot = "perm.GSvsEvents", ylab="Global signature", xlab="Instances")
+plot(out2, diagnostic.plot = "perms.corr.GS", ylab="mean.GS(ev) - mean.GS(noev)", xlab="mean lHR-stat")
+```
+
+##  Power approximation using positive controls
+We consider `hrunbiased::mammaprint` genes to create positive control
+signatures as these have been found to  be good markers for
+prognosis. Random signatures of size 20 using only positive control
+genes are used to  approximate the power of the non-zero lHR
+hypothesis testing for different adjusted Cox models (by negative
+control signatures).
+
+```{r, warning = FALSE, message = FALSE}
+propseq <- 1
+nrpcs <- 200
+
+out3 <- hrunbiasedDiagnostic(nda.gse1456,
+  correction.type = correction.type, score = vargenes.score,
+  seqquant = seqquant, mc.cores=mc.cores, positive.controls = mammaprint.sig,
+  diagnostic.type = c("positive.cont.power"), sigSize = 20,
+  nrs = nrs, nrpcs = nrpcs, executation.info = FALSE)
+```
+
+Three diagnostic plots (see Figure 4) are available for an object of class
+`hrunbiasedPCpower`, "positive.cont.power" shows the approximated power
+curves, "bias.power" compares average lHR for random signatures with
+proportion of rejections, and "corNCsig.power" compares correlation between
+correction variables (negative control signatures) and positive controls
+with proportion of rejections. The proportion of rejections decreases slightly
+with the adjustment by negative controls and even more with the adjustment by
+the global signature. This can be due to positive controls and global
+signature being positively correlated (see right-hand side figure).
+
+
+```{r fig4, warning = FALSE, message = FALSE, fig.align = "center", fig.width = 9, fig.height=5, fig.cap = "GSE1456 diagnostic: power curve using several negative control signature adjustments (in left), power versus mean lHR-stat (in center) and power versus correlation between negative control signatures and positive control signature (in right); The bias is reduced when adjusting by negative control signatures at expenses of a power loss."}
+par(mfrow=c(1,3))
+seq.alpha  <- seq(0,.5, length.out=50)
+seq.alpha.pow <- c(0.05, 0.1)
+plot(out3, diagnostic.plot = "positive.cont.power",
+     seq.alpha.pow = seq.alpha.pow, lwd = 3, legend.out = FALSE)
+plot(out3, diagnostic.plot = "bias.power", seq.alpha = seq.alpha, lwd = 3,
+     legend.out=FALSE)
+plot(out3, diagnostic.plot = "corNCsig.power", seq.alpha = seq.alpha, lwd = 3,
+     legend.out=FALSE)
+```
+
+
+##  Testing the mammaprint signature
+Assessing the association between a target gene signature and survival can be done using the
+`hrunbiased::hrunbiasedTesting` function. Below we show the R commands
+and outcome (see Figure 5) of the test employing both asymptotic and random
+signatures null distributions, and both no correction and adjustment by
+global signature. We also consider the testing for each of the genes of the
+signature to make some emphasis in the impact that creating a signature out
+of a group of genes that share a similar signal may have on survival. We
+shall see that the lHR statistic for single genes is  much smaller (in
+average) than the one obtained by the signature of the corresponding genes.
+
+Similar conclusions are achieved using or not using the GS adjustment,
+being the adjusted model slightly more conservative in the random
+signatures based test.
+
+
+```{r fig5, warning = FALSE, message = FALSE, fig.width = 9, fig.height=5, fig.cap = "GSE1456 testing: mammaprint signature testing; Black dotted lines corresponds to random signatures lHR-statistic, blue dotdashed line corresponds to random genes lHR-statistic, in red (points and dashed line) there is the individual gene lHR-statistics for the mammaprint signature and the green solid line is the lHR-statistic for the mammaprint signature."}
+nrs <- 500
+correction.type <-  "none"
+tout.none <- hrunbiasedTesting(nda.gse1456,
+  gene.signature = mammaprint.sig,
+  test.type = c("asymptotic", "random.signatures", "random.genes"),
+  correction.type = correction.type, mc.cores=mc.cores,
+  nrs = nrs,  executation.info = FALSE)
+
+
+correction.type <-  "Gsignature"
+tout.GS <- hrunbiasedTesting(nda.gse1456,
+  gene.signature = mammaprint.sig,
+  test.type = c("asymptotic", "random.signatures", "random.genes"),
+  correction.type = correction.type, mc.cores=mc.cores,
+  nrs = nrs,  executation.info = FALSE)
+print(tout.none)
+print(tout.GS)
+
+par(mfrow=c(1,2))
+plot(tout.none, main="testing mammaprint signature no adj",
+     xlab="lHR-stat", show.stat = TRUE,legend.out = FALSE)
+plot(tout.GS, main="testing mammaprint signature GS adj", xlab="lHR-stat",
+     show.stat = TRUE, legend.out= FALSE)
+```
+
+
+#  Diagnostic plots for all breast cancer datasets
+The obtained output in data `out.brca` could be found from `nda.brca`
+using the following R commands and will be used from now onwards to avoid
+computational burden.
+```{r, warning = FALSE, message = FALSE}
+#namesForER <- unique(nda.brca$dataset)
+#adjusted.var <- c(rep(NA,5), "cohort")
+#vargenes.score <- sapply(namesForER, function(o) apply(exprs(nda.brca[,nda.brca$dataset == o]),1,mad))
+#names(adjusted.var) <- namesForER
+#propseq <- c(0.2, 0.6, 1)
+#nrs = 1000; npcrs = 500
+#mc.cores <- 8
+#sigSize <- c(1, 50, 100, 200)
+#seqquant  <- c(0,0.05, 0.2, 1)
+#mammaprint.sig <- intersect(mammaprint.sig, rownames(nda.gse1456))
+#for(o in namesForER){
+#  out.brca[[o]] <- hrunbiasedDiagnostic(nda.brca[,nda.brca$dataset == o],
+#     correction.type = c("NCsignatures"), score = vargenes.score[,o],
+#     seqquant = seqquant, mc.cores=mc.cores, id.size = 2,
+#     diagnostic.type = c("density.rs", "positive.cont.power"),
+#     bootstrapping = TRUE, alternative ="two.sided",
+#     positive.controls =  mammaprint.sig, prop.pos.cont = propseq,
+#     sigSize = sigSize, nrs = nrs, npcrs = npcrs,
+#     adj.var.GS = "GSadj", adjusted.var.fixed = adjusted.var[o])
+#}
+```
+
+
+
+##   Association with survival using random signatures
+The general behaviour of the lHR statistic on random signatures for
+6 breast cancer cohorts is shown for a fixed signature size of 100 in
+Figure 6. Under no correction, positive average lHR are
+observed in GSE1456, GSE3494 and metabric and centered distributions
+are observed in GSE2034, GSE2990 and GSE7390.
+
+```{r fig6, warning = FALSE, message = FALSE, fig.width = 9, fig.height =7, fig.cap = "Density estimation of random signatures lHR-statistics using a Cox model with negative control gene signature adjustments for six breast cancer cohorts; Positive biases are observed in datasets GSE1456, GSE3494 and metabric whereas more centered distributions are observed for GSE2034, GSE2990 and GSE7390."}
+ln <- length(out.brca[[1]]$seqquant)
+op <- par(mfrow = c(3+1,2), oma = c(3,2,2,2) + 0.1,  mar = c(2,1,1,2) + 0.1)
+layout(rbind(t(sapply(2*c(0:2), function(l) l+c(1,2))), c(7,7)),
+       widths=c(.5,.5), heights= c(rep(1,3), min(1, 3 * 0.18)))
+for(o in names(out.brca)) plot(out.brca[[o]], diagnostic.plot = "density.rs",
+    main = o, xlab = "lhr.stat", ylab="", lwd=3, legend.out = FALSE,
+    id.size = 3 )
+plot(0,0, axes=FALSE,frame.plot=FALSE, main="", bty = 'n', type = 'n',
+     xaxt = 'n', yaxt = 'n', xlab="", ylab="")
+legend("top", horiz =TRUE,  legend = paste0(round(out.brca[[1]]$seqquant,3)),
+       title = "neg.cont.quantile", col = grey.colors(ln), lty = 1:ln, lwd = 3)
+```
+
+For the huge dataset avaialble in the  metabric, we show the
+association between random gene signatures and  recurrence in several
+signature sizes in Figure 7. A positive bias gets evident with an increase of the
+sample size unless an ajdustment by global signature is performed.
+
+```{r fig7, warning = FALSE, message = FALSE, fig.width = 8, fig.height=7, fig.cap = "Metabric diagnostic: density plot for random signature lHR-statisitcs using several signature sizes and under different negative control signature adjustments, from q_0 (no adjustment) to q_1 (global signature adjustment); The large positive bias under no adjustment is reduced when adding global signatures as confounding variables in the model."}
+plot(out.brca[["metabric"]], diagnostic.plot = "density.rs.size",
+     legend.out = TRUE, lwd= 3)
+```
+
+Random gene signature relationship with survival depends heavily on
+the dataset under consideration, for instance on one hand, for GSE7390
+(see Figure 8) we observe almost no bias in either association at gene level nor association
+in signature level. On the other hand, for the metabric dataset (see
+Figure 9), a small positive bias at gene level is magnified when using random signatures
+of size 50.
+```{r fig8, warning = FALSE, message = FALSE, fig.width = 9, fig.height=5, fig.cap = "GSE7390 diagnostic: estimated lHR for random signatures (blue) against average estimated lHR at gene level across random signatures (green) and estimated lHR at gene level (red); The distributions, both at gene level and at signature level, are centered."}
+plot(out.brca[["GSE7390"]], diagnostic.plot = "geneMean.geneSign",
+     legend.out = FALSE, lwd= 2)
+```
+```{r fig9, warning = FALSE, message = FALSE, fig.width = 9, fig.height=5, fig.cap = "Metabric diagnostic: estimated lHR for random signatures (blue) against average estimated lHR at gene level across random signatures (green) and estimated lHR at gene level (red);  The distribution at gene level seems to be almost centered whereas there is a large positive bias at signature level."}
+plot(out.brca[["metabric"]], diagnostic.plot = "geneMean.geneSign",
+     legend.out = FALSE, lwd= 2)
+```
+
+
+##  Power approximation using positive controls
+Approximation of power curves using (contaminated) positive control
+signatures of size 20 are presented for the remaining 5 datasets in
+`brca.data` (Figure 10-14). We consider three levels of contamination: 0.2 (4 genes
+randomly selected from mamma print and 16 randomly selected from all
+genes), 0.6 (12 genes randomly selected from mamma print and 8
+randomly selected from all genes), and 1 (all 20 genes randomly
+selected from mammaprint). We further use a rejection level of 0.01 to compare
+random signature biases and proportion of positive control rejections.
+
+```{r, warning = FALSE, message = FALSE}
+seq.alpha.pow = 0.01
+```
+
+The proportion of rejection is high in most of the cases and
+negative control corrections, even for contaminated signatures. Thus,
+when the signal is strong as it happens with the mamma print genes,
+statistically relevant associations are found when adjusting by
+global signatures, and results in a conservative testing procedure for
+randomly generated signatures.
+
+```{r fig10, warning = FALSE, message = FALSE, fig.width = 9, fig.height=9, fig.cap = "GSE2034 diagnostic: power curve using several negative control signature adjustments (left), power versus mean lHR-stat (center) and power versus correlation between negative control signatures and positive control signature (right). "}
+par(mfrow=c(3,3))
+o <- "GSE2034"
+for(k in 1:3) plot(out.brca[[o]], diagnostic.plot = "positive.cont.power",
+  power.whplots = k, lwd=3, main = names(out.brca[[o]]$hr.pc)[k],legend.out= FALSE)
+for(k in 1:3) plot(out.brca[[o]], diagnostic.plot = "bias.power",
+   power.whplots = k, lwd=3, seq.alpha.pow = 0.01, legend.out=FALSE)
+for(k in 1:3) plot(out.brca[[o]], diagnostic.plot = "corNCsig.power",
+   power.whplots = k, seq.alpha.pow = 0.01, legend.out=FALSE)
+```
+
+
+```{r fig11, warning = FALSE, message = FALSE, fig.width = 9, fig.height=9, fig.cap = "GSE2990 diagnostic: power curve using several negative control signature adjustments (left), power versus mean lHR-stat (center) and power versus correlation between negative control signatures and positive control signature (right). "}
+o <- "GSE2990"
+par(mfrow=c(3,3))
+for(k in 1:3) plot(out.brca[[o]], diagnostic.plot = "positive.cont.power",
+  power.whplots = k, lwd=3, main = names(out.brca[[o]]$hr.pc)[k],legend.out= FALSE)
+for(k in 1:3) plot(out.brca[[o]], diagnostic.plot = "bias.power",
+   power.whplots = k, lwd=3, seq.alpha.pow = 0.01, legend.out=FALSE)
+for(k in 1:3) plot(out.brca[[o]], diagnostic.plot = "corNCsig.power",
+   power.whplots = k, seq.alpha.pow = 0.01, legend.out=FALSE)
+```
+
+```{r fig12, warning = FALSE, message = FALSE, fig.width = 9, fig.height=9, fig.cap = "GSE3494 diagnostic: power curve using several negative control signature adjustments (left), power versus mean lHR-stat (center) and power versus correlation between negative control signatures and positive control signature (right). "}
+o <- "GSE3494"
+par(mfrow=c(3,3))
+for(k in 1:3) plot(out.brca[[o]], diagnostic.plot = "positive.cont.power",
+  power.whplots = k, lwd=3, main = names(out.brca[[o]]$hr.pc)[k],legend.out= FALSE)
+for(k in 1:3) plot(out.brca[[o]], diagnostic.plot = "bias.power",
+   power.whplots = k, lwd=3, seq.alpha.pow = 0.01, legend.out=FALSE)
+for(k in 1:3) plot(out.brca[[o]], diagnostic.plot = "corNCsig.power",
+   power.whplots = k, seq.alpha.pow = 0.01, legend.out=FALSE)
+```
+
+```{r fig13, warning = FALSE, message = FALSE, fig.width = 9, fig.height=9, fig.cap = "GSE7390 diagnostic: power curve using several negative control signature adjustments (left), power versus mean lHR-stat (center) and power versus correlation between negative control signatures and positive control signature (right). "}
+o <- "GSE7390"
+par(mfrow=c(3,3))
+for(k in 1:3) plot(out.brca[[o]], diagnostic.plot = "positive.cont.power",
+  power.whplots = k, lwd=3, main = names(out.brca[[o]]$hr.pc)[k],legend.out= FALSE)
+for(k in 1:3) plot(out.brca[[o]], diagnostic.plot = "bias.power",
+   power.whplots = k, lwd=3, seq.alpha.pow = 0.01, legend.out=FALSE)
+for(k in 1:3) plot(out.brca[[o]], diagnostic.plot = "corNCsig.power",
+   power.whplots = k, seq.alpha.pow = 0.01, legend.out=FALSE)
+```
+
+```{r fig14, warning = FALSE, message = FALSE, fig.width = 9, fig.height=9, fig.cap = "Metabric diagnostic: power curve using several negative control signature adjustments (left), power versus mean lHR-stat (center) and power versus correlation between negative control signatures and positive control signature (right). "}
+o <- "metabric"
+par(mfrow=c(3,3))
+for(k in 1:3) plot(out.brca[[o]], diagnostic.plot = "positive.cont.power",
+  power.whplots = k, lwd=3, main = names(out.brca[[o]]$hr.pc)[k],legend.out= FALSE)
+for(k in 1:3) plot(out.brca[[o]], diagnostic.plot = "bias.power",
+   power.whplots = k, lwd=3, seq.alpha.pow = 0.01, legend.out=FALSE)
+for(k in 1:3) plot(out.brca[[o]], diagnostic.plot = "corNCsig.power",
+   power.whplots = k, seq.alpha.pow = 0.01, legend.out=FALSE)
+```
+
+
+##   GSVA, GS-corr and GS-adj power comparison
+Approximation of power curves using (contaminated) positive control
+signatures of size 20 are presented for the six datasets under
+several gene signature definitions (GSVA, GS-corr and GS-adj). The three methods take into account the overall structure of
+random sets of genes of the same size, GSVA does  it in a ranking based
+approach whereas GS-cor and GS-adj use the GS to account for the global
+trend (a priori or as a covariate in the Cox model). GS adjusted and GS-cor
+signatures tend to find better rejection rates than GSVA
+approaches. Figures 15-21 are generated employing the object
+`hrunbiased::signmethods.mp`.
+
+
+
+```{r fig15, warning = FALSE, message = FALSE, fig.width =8, fig.height=8, fig.cap = "GSE1456 diagnostic: power curve using several signature definitions (gsva in the black solid line, GS-cor in red stripped line and GS-adj in green dotted line)"}
+par(mfrow=c(2,2))
+for(l in 1:4){
+ seqalpha <- seq(0,0.15,by=0.001)
+ pow.gsva <- sapply(seqalpha, function(x)
+  mean(do.call(rbind,signmethods.mp$gsva[[paste0("nda","GSE1456","wh")]][[l]])[,5]<x))
+ pow.gscor <- sapply(seqalpha, function(x)
+  mean(do.call(rbind,signmethods.mp$GScor[[paste0("nda","GSE1456","wh")]][[l]])[,5]<x))
+ pow.GS <- sapply(seqalpha, function(x)
+  mean(do.call(rbind,signmethods.mp$GSadj[[paste0("nda","GSE1456","wh")]][[l]])[,5]<x))
+
+ plot(seqalpha,pow.gsva, type="l", lwd=3, lty=1, xlab="alpha",
+      ylab="prop.rejections", ylim=c(0,1), main = paste0("prop.pos ",
+      signmethods.mp$prop.cont.sig[l]))
+ lines(seqalpha,pow.gscor, type="l", lwd=3, col=2, lty=2)
+ lines(seqalpha,pow.GS, type="l", lwd=3, col=3, lty=3)
+}
+```
+
+```{r fig16, warning = FALSE, message = FALSE, fig.width = 8, fig.height=8, fig.cap = "GSE2034 diagnostic: power curve using several signature definitions (gsva in the black solid line, GS-cor in red stripped line and GS-adj in green dotted line)"}
+par(mfrow=c(2,2))
+for(l in 1:4){
+ seqalpha <- seq(0,0.15,by=0.001)
+ pow.gsva <- sapply(seqalpha, function(x)
+  mean(do.call(rbind,signmethods.mp$gsva[[paste0("nda","GSE2034","wh")]][[l]])[,5]<x))
+ pow.gscor <- sapply(seqalpha, function(x)
+  mean(do.call(rbind,signmethods.mp$GScor[[paste0("nda","GSE2034","wh")]][[l]])[,5]<x))
+ pow.GS <- sapply(seqalpha, function(x)
+  mean(do.call(rbind,signmethods.mp$GSadj[[paste0("nda","GSE2034","wh")]][[l]])[,5]<x))
+
+ plot(seqalpha,pow.gsva, type="l", lwd=3, lty=1, xlab="alpha",
+      ylab="prop.rejections", ylim=c(0,1), main = paste0("prop.pos ",
+      signmethods.mp$prop.cont.sig[l]))
+ lines(seqalpha,pow.gscor, type="l", lwd=3, col=2, lty=2)
+ lines(seqalpha,pow.GS, type="l", lwd=3, col=3, lty=3)
+}
+```
+
+```{r fig17, warning = FALSE, message = FALSE, fig.width =8, fig.height=8, fig.cap = "GSE2990 diagnostic: power curve using several signature definitions (gsva in the black solid line, GS-cor in red stripped line and GS-adj in green dotted line)"}
+par(mfrow=c(2,2))
+for(l in 1:4){
+ seqalpha <- seq(0,0.15,by=0.001)
+ pow.gsva <- sapply(seqalpha, function(x)
+  mean(do.call(rbind,signmethods.mp$gsva[[paste0("nda","GSE2990","wh")]][[l]])[,5]<x))
+ pow.gscor <- sapply(seqalpha, function(x)
+  mean(do.call(rbind,signmethods.mp$GScor[[paste0("nda","GSE2990","wh")]][[l]])[,5]<x))
+ pow.GS <- sapply(seqalpha, function(x)
+  mean(do.call(rbind,signmethods.mp$GSadj[[paste0("nda","GSE2990","wh")]][[l]])[,5]<x))
+
+ plot(seqalpha,pow.gsva, type="l", lwd=3, lty=1, xlab="alpha",
+      ylab="prop.rejections", ylim=c(0,1), main = paste0("prop.pos ",
+      signmethods.mp$prop.cont.sig[l]))
+ lines(seqalpha,pow.gscor, type="l", lwd=3, col=2, lty=2)
+ lines(seqalpha,pow.GS, type="l", lwd=3, col=3, lty=3)
+}
+```
+
+```{r fig18, warning = FALSE, message = FALSE, fig.width =8, fig.height=8, fig.cap = "GSE3494 diagnostic: power curve using several signature definitions (gsva in the black solid line, GS-cor in red stripped line and GS-adj in green dotted line)"}
+par(mfrow=c(2,2))
+for(l in 1:4){
+ seqalpha <- seq(0,0.15,by=0.001)
+ pow.gsva <- sapply(seqalpha, function(x)
+  mean(do.call(rbind,signmethods.mp$gsva[[paste0("nda","GSE3494","wh")]][[l]])[,5]<x))
+ pow.gscor <- sapply(seqalpha, function(x)
+  mean(do.call(rbind,signmethods.mp$GScor[[paste0("nda","GSE3494","wh")]][[l]])[,5]<x))
+ pow.GS <- sapply(seqalpha, function(x)
+  mean(do.call(rbind,signmethods.mp$GSadj[[paste0("nda","GSE3494","wh")]][[l]])[,5]<x))
+
+ plot(seqalpha,pow.gsva, type="l", lwd=3, lty=1, xlab="alpha",
+      ylab="prop.rejections", ylim=c(0,1), main = paste0("prop.pos ",
+      signmethods.mp$prop.cont.sig[l]))
+ lines(seqalpha,pow.gscor, type="l", lwd=3, col=2, lty=2)
+ lines(seqalpha,pow.GS, type="l", lwd=3, col=3, lty=3)
+}
+```
+
+```{r fig19, warning = FALSE, message = FALSE, fig.width = 8, fig.height=8, fig.cap = "GSE7390 diagnostic: power curve using several signature definitions (gsva in the black solid line, GS-cor in red stripped line and GS-adj in green dotted line)"}
+par(mfrow=c(2,2))
+for(l in 1:4){
+ seqalpha <- seq(0,0.15,by=0.001)
+ pow.gsva <- sapply(seqalpha, function(x)
+  mean(do.call(rbind,signmethods.mp$gsva[[paste0("nda","GSE7390","wh")]][[l]])[,5]<x))
+ pow.gscor <- sapply(seqalpha, function(x)
+  mean(do.call(rbind,signmethods.mp$GScor[[paste0("nda","GSE7390","wh")]][[l]])[,5]<x))
+ pow.GS <- sapply(seqalpha, function(x)
+  mean(do.call(rbind,signmethods.mp$GSadj[[paste0("nda","GSE7390","wh")]][[l]])[,5]<x))
+
+ plot(seqalpha,pow.gsva, type="l", lwd=3, lty=1, xlab="alpha",
+      ylab="prop.rejections", ylim=c(0,1), main = paste0("prop.pos ",
+      signmethods.mp$prop.cont.sig[l]))
+ lines(seqalpha,pow.gscor, type="l", lwd=3, col=2, lty=2)
+ lines(seqalpha,pow.GS, type="l", lwd=3, col=3, lty=3)
+}
+```
+
+```{r fig20, warning = FALSE, message = FALSE, fig.width = 8, fig.height=8, fig.cap = "Metabric diagnostic: power curve using several signature definitions (gsva in the black solid line, GS-cor in red stripped line and GS-adj in green dotted line)"}
+par(mfrow=c(2,2))
+for(l in 1:4){
+ seqalpha <- seq(0,0.15,by=0.001)
+ pow.gsva <- sapply(seqalpha, function(x)
+  mean(do.call(rbind,signmethods.mp$gsva[[paste0("nda","metabric","wh")]][[l]])[,5]<x))
+ pow.gscor <- sapply(seqalpha, function(x)
+  mean(do.call(rbind,signmethods.mp$GScor[[paste0("nda","metabric","wh")]][[l]])[,5]<x))
+ pow.GS <- sapply(seqalpha, function(x)
+  mean(do.call(rbind,signmethods.mp$GSadj[[paste0("nda","metabric","wh")]][[l]])[,5]<x))
+
+ plot(seqalpha,pow.gsva, type="l", lwd=3, lty=1, xlab="alpha",
+      ylab="prop.rejections", ylim=c(0,1), main = paste0("prop.pos ",
+      signmethods.mp$prop.cont.sig[l]))
+ lines(seqalpha,pow.gscor, type="l", lwd=3, col=2, lty=2)
+ lines(seqalpha,pow.GS, type="l", lwd=3, col=3, lty=3)
+}
+```
+
+
+# References
+Cardoso, Fatima, Laura J. van't Veer, Jan Bogaerts, Leen Slaets,
+Giuseppe Viale, Suzette Delaloge, Jean-Yves Pierga, et
+al. 2016. "70-Gene Signature as an Aid to Treatment Decisions in
+Early-Stage Breast Cancer." New England Journal of Medicine 375
+(8):717-29.
+
+Venet, David, Jacques E. Dumont, and Vincent Detours. 2011. "Most random gene expression signatures are
+significantly associated with breast cancer outcome." PLoS Computational Biology 7 (10).
